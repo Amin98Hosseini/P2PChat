@@ -1,102 +1,200 @@
-import socket
-import threading
-import json
-import os
+#!/usr/bin/env python3
+import socket, threading, time
 
-class TCPChatServer:
-    def __init__(self):
-        self.clients = {}  # client_id -> socket
-        self.client_ids = {}  # socket -> client_id
-        
-    def handle_client(self, client_socket, client_address):
+# FIX: Set to 0.0.0.0 to allow connections from any interface (localhost & LAN)
+HOST = "0.0.0.0"  
+PORT = 12345
+
+clients_lock = threading.Lock()
+clients = {}        # id -> socket
+clients_group = {}  # id -> group hash
+
+# ======================= HELPERS =====================
+def recv_until_newline(sock):
+    data = bytearray()
+    try:
+        while True:
+            chunk = sock.recv(1)
+            if not chunk:
+                return None
+            if chunk == b"\n":
+                break
+            data.extend(chunk)
+        return data.decode()
+    except:
+        return None
+
+def send_online_list(sock, requester):
+    with clients_lock:
+        g = clients_group.get(requester)
+        users_in_group = [
+            u for u in clients
+            if clients_group.get(u) == g and u != requester
+        ]
+    sock.sendall(("ONLINE_LIST " + " ".join(users_in_group) + "\n").encode())
+
+def broadcast_new(user):
+    with clients_lock:
+        g = clients_group.get(user)
+        for u, s in clients.items():
+            if u != user and clients_group.get(u) == g:
+                try:
+                    s.sendall(f"NEW {user}\n".encode())
+                except:
+                    pass
+
+def broadcast_left(user):
+    with clients_lock:
+        g = clients_group.get(user)
+        for u, s in clients.items():
+            if u != user and clients_group.get(u) == g:
+                try:
+                    s.sendall(f"LEFT {user}\n".encode())
+                except:
+                    pass
+
+# ======================= CONNECTION ==================
+def handle(conn, addr):
+    user = None
+    try:
+        # -------- LOGIN ----------
+        while user is None:
+            line = recv_until_newline(conn)
+            if not line:
+                return
+            p = line.split()
+            if len(p) < 2:
+                return
+            if p[0] == "LOGIN":
+                u = p[1]
+                with clients_lock:
+                    if u in clients:
+                        # FIX 1: Clear error message format
+                        conn.sendall(b"ERROR Username already exists\n")
+                        return
+                    else:
+                        clients[u] = conn
+                        user = u
+                        conn.sendall(b"OK\n")
+
+        # -------- GROUP (FIX: Wait for Group Command) ----------
+        line = recv_until_newline(conn)
+        if not line:
+            return
+        p = line.split()
+        if len(p) >= 2 and p[0] == "GROUP":
+            with clients_lock:
+                clients_group[user] = p[1]
+            send_online_list(conn, user)
+            broadcast_new(user)
+        else:
+            return 
+
+        # -------- MAIN LOOP ----------
+        while True:
+            line = recv_until_newline(conn)
+            if not line:
+                break
+            p = line.split()
+            if len(p) < 2:
+                continue
+
+            if p[0] == "GET_ONLINE_USERS":
+                send_online_list(conn, user)
+
+            elif p[0] == "SEND_MSG":
+                if len(p) < 3:
+                    continue
+
+                target = p[1]
+                size = int(p[2])
+
+                data = bytearray()
+                while len(data) < size:
+                    chunk = conn.recv(size - len(data))
+                    if not chunk:
+                        return
+                    data.extend(chunk)
+
+                with clients_lock:
+                    sender_group = clients_group.get(user)
+
+                    # ⭐⭐⭐ BROADCAST SUPPORT ⭐⭐⭐
+                    if target == "BROADCAST":
+                        for u, tsock in clients.items():
+                            if u != user and clients_group.get(u) == sender_group:
+                                try:
+                                    tsock.sendall(
+                                        f"SEND_MSG {user} {size}\n".encode() + data
+                                    )
+                                except:
+                                    pass
+                        continue
+
+                    # normal direct message
+                    if clients_group.get(target) != sender_group:
+                        continue
+
+                    tsock = clients.get(target)
+
+                if tsock:
+                    try:
+                        tsock.sendall(
+                            f"SEND_MSG {user} {size}\n".encode() + data
+                        )
+                    except:
+                        pass
+
+            elif p[0] == "SEND":
+                if len(p) < 4:
+                    continue
+                target = p[1]
+                enc_filename = p[2]
+                size = int(p[3])
+
+                data = bytearray()
+                while len(data) < size:
+                    chunk = conn.recv(size - len(data))
+                    if not chunk:
+                        return
+                    data.extend(chunk)
+
+                with clients_lock:
+                    if clients_group.get(target) != clients_group.get(user):
+                        continue
+                    tsock = clients.get(target)
+
+                if tsock:
+                    try:
+                        tsock.sendall(
+                            f"SEND {user} {enc_filename} {size}\n".encode() + data
+                        )
+                    except:
+                        pass
+
+    except Exception as e:
+        print(f"Error handling {addr}: {e}")
+    finally:
+        if user:
+            broadcast_left(user)
+            with clients_lock:
+                clients.pop(user, None)
+                clients_group.pop(user, None)
         try:
-            while True:
-                data = client_socket.recv(4096)
-                if not data:
-                    break
-                    
-                message_data = json.loads(data.decode('utf-8'))
-                
-                # Registration
-                if 'register' in str(message_data).lower() or 'id' in message_data:
-                    client_id = message_data.get('id', '')
-                    self.clients[client_id] = client_socket
-                    self.client_ids[client_socket] = client_id
-                    print(f"Client {client_id} connected from {client_address}")
-                    
-                elif 'type' in message_data:
-                    if message_data['type'] == 'text':
-                        recipient = message_data.get('recipient', '')
-                        content = message_data.get('content', '')
-                        
-                        # Forward to recipient
-                        if recipient in self.clients:
-                            try:
-                                response = {
-                                    'sender': self.client_ids[client_socket],
-                                    'type': 'text',
-                                    'content': content
-                                }
-                                self.clients[recipient].send(json.dumps(response).encode('utf-8'))
-                            except Exception as e:
-                                print(f"Could not send to {recipient}: {e}")
-                        else:
-                            print(f"Recipient {recipient} not found")
-                            
-                    elif message_data['type'] == 'file':
-                        recipient = message_data.get('recipient', '')
-                        filename = message_data.get('filename', '')
-                        
-                        if recipient in self.clients:
-                            try:
-                                response = {
-                                    'sender': self.client_ids[client_socket],
-                                    'type': 'file',
-                                    'filename': filename,
-                                    'data': message_data['data']
-                                }
-                                self.clients[recipient].send(json.dumps(response).encode('utf-8'))
-                            except Exception as e:
-                                print(f"Could not send file to {recipient}: {e}")
-                        else:
-                            print(f"Recipient {recipient} not found")
-                            
-        except Exception as e:
-            print(f"Error handling client {client_address}: {e}")
-        finally:
-            # Clean up on disconnect
-            if client_socket in self.client_ids:
-                client_id = self.client_ids[client_socket]
-                del self.clients[client_id]
-                del self.client_ids[client_socket]
-                print(f"Client {client_id} disconnected")
-                
-    def start_server(self, host='192.168.1.101', port=8888):
-        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        
-        try:
-            server_socket.bind((host, port))
-            server_socket.listen(5)
-            print(f"Server listening on {host}:{port}")
-            
-            while True:
-                client_socket, address = server_socket.accept()
-                client_thread = threading.Thread(
-                    target=self.handle_client,
-                    args=(client_socket, address)
-                )
-                client_thread.daemon = True
-                client_thread.start()
-                
-        except Exception as e:
-            print(f"Server error: {e}")
-        finally:
-            server_socket.close()
+            conn.close()
+        except:
+            pass
+
+# ======================= MAIN ========================
+def main():
+    with socket.socket() as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind((HOST, PORT))
+        s.listen()
+        print(f"Server running on {HOST}:{PORT} (No Passwords, Ephemeral)...")
+        while True:
+            c, a = s.accept()
+            threading.Thread(target=handle, args=(c,a), daemon=True).start()
 
 if __name__ == "__main__":
-    server = TCPChatServer()
-    try:
-        server.start_server()
-    except KeyboardInterrupt:
-        print("Server stopped")
+    main()
