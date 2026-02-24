@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>P2PChat Access</title>
+  <style>
+    :root {
+      --bg: #f0f5fb;
+      --card: #ffffff;
+      --text: #1d2a38;
+      --muted: #5d7188;
+      --primary: #1463b3;
+      --danger: #b3261e;
+      --border: #d5e0ec;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(180deg, #ebf2fb 0%, #f8fbff 100%);
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      color: var(--text);
+      padding: 16px;
+    }
+
+    .card {
+      width: 100%;
+      max-width: 420px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--card);
+      padding: 20px;
+      box-shadow: 0 8px 24px rgba(13, 34, 56, 0.08);
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 24px;
+    }
+
+    p {
+      margin: 0 0 16px;
+      color: var(--muted);
+      line-height: 1.45;
+      font-size: 14px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    input {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      font-size: 15px;
+      margin-bottom: 10px;
+    }
+
+    button {
+      width: 100%;
+      border: 0;
+      border-radius: 10px;
+      padding: 10px;
+      background: var(--primary);
+      color: white;
+      font-size: 15px;
+      cursor: pointer;
+    }
+
+    .error {
+      display: none;
+      border: 1px solid #f2b8b5;
+      background: #fdecea;
+      color: var(--danger);
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-bottom: 10px;
+      font-size: 14px;
+    }
+
+    .hint {
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>P2PChat Web Access</h1>
+    <p>Enter the access password to open the chat web app.</p>
+
+    <div id="error" class="error">Wrong password. Try again.</div>
+
+    <form method="post" action="/login">
+      <label for="password">Access Password</label>
+      <input id="password" name="password" type="password" placeholder="Enter password" required autofocus>
+      <button type="submit">Open Web App</button>
+    </form>
+
+    <div class="hint">Default password: <code>admin1234</code></div>
+  </main>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("error") === "1") {
+      document.getElementById("error").style.display = "block";
+    }
+  </script>
+</body>
+</html>

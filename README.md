@@ -1,140 +1,234 @@
-# P2P Chat & File Transfer – Python GUI Client + Simple Server
+# P2PChat
 
-Lightweight **peer-to-peer** chat and file transfer application with:
+P2PChat is a lightweight encrypted group chat system with two client options:
+- Desktop app client (`ClientCode.py`, Tkinter GUI)
+- Web client (`web_client/`, browser UI)
 
-* Tkinter GUI client
-* Encrypted text messages (simple XOR + SHA256-based key + base64)
-* File sending/receiving
-* Group support (shared group password)
-* Real-time peer list updates
-* Basic TCP server for message & file relaying
+Both clients connect to the same Python relay server (`ServerCode.py`) and can chat/file-share together when they use the same group password.
 
-> **Current status (Feb 2026):** educational prototype – **not secure for real-world usage**
+Important: this project currently uses educational XOR-based encryption, not production-grade security.
 
-## Features
+## Project Overview
 
-| Feature                         | Client | Server  | Notes                                             |
-| ------------------------------- | ------ | ------- | ------------------------------------------------- |
-| Connect / Disconnect            | ✓      | —       | arbitrary IP:port                                 |
-| Register with custom user ID    | ✓      | ✓       | e.g. "alice", "bob"                               |
-| Send encrypted text messages    | ✓      | ✓       | XOR + SHA256-derived key + base64                 |
-| Send files                      | ✓      | ✓       | any file type                                     |
-| Receive files automatically     | ✓      | —       | saved to `~/client_received/`                     |
-| Real-time received messages     | ✓      | —       | scrollable text area                              |
-| Group support (shared password) | ✓      | ✓       | only peers with same group key see messages/files |
-| Connection status & logs        | ✓      | console | basic feedback                                    |
+### Components
+- `ServerCode.py`: TCP relay server (login, group isolation, message/file forwarding)
+- `ClientCode.py`: desktop GUI client (chat, file transfer, group-based encryption)
+- `web_client/web_app.py`: web bridge server (FastAPI + WebSocket)
+- `web_client/static/`: browser interface files (`index.html`, `app.js`, `style.css`)
+- `run_all.py`: launcher to run server + web backend together with one command
 
-## Project Structure
+### How it works
+1. User logs in with a unique username.
+2. User joins a group using a password.
+3. Group password is used by clients for encryption/decryption.
+4. Server relays data only between users in the same group.
+5. Desktop and web users can communicate with each other.
 
-```text
-p2p-chat/
-├── client_gui.py ← GUI client (Tkinter)
-├── server.py     ← simple TCP relay server
-├── README.md
-└── Downloads/    ← received files are saved here
-```
+## Run All on One Server (`run_all.py`)
 
-## Requirements
+Use `run_all.py` when you want one machine (for example Raspberry Pi) to run both:
+- TCP chat server (`ServerCode.py`)
+- Web backend (`web_client.web_app`)
 
-* Python 3.10 – 3.12 (Tkinter included in standard library)
-* No external packages required
-
-## Quick Start
-
-### 1. Start the Server
-
+### Install once
 ```bash
-python server.py
+pip install -r requirements.txt
 ```
 
-* Default listen address: 0.0.0.0:12345
-* Change host/port directly in the code if needed
-
-### 2. Run one or more Clients
-
+### Run both services with one command
 ```bash
-python client_gui.py
+python run_all.py --host 0.0.0.0 --web-port 8000
 ```
 
-### 3. In the GUI
+This starts:
+- Chat server on `12345`
+- Web app on `8000`
 
-* Enter server IP and port (default: 127.0.0.1:12345)
-* Choose your user ID (alice, bob, etc.)
-* Enter **group password**
-* Click Connect
-* Type peer ID + message → Send Msg
-* Or select file + peer ID → Send File
+### Connect from other devices
+- Open browser: `http://<server-ip>:8000`
+- In web form use:
+  - `Server IP`: `127.0.0.1` (because chat server is on same machine)
+  - `Port`: `12345`
 
-Received messages and files appear in the bottom text area.
+Stop both services with `Ctrl+C`.
 
-Files are automatically saved to:
+## Server
 
+### What the server does
+- Accepts TCP clients on `0.0.0.0:12345` by default
+- Handles commands:
+  - `LOGIN <username>`
+  - `GROUP <group_hash>`
+  - `GET_ONLINE_USERS`
+  - `SEND_MSG <target|BROADCAST> <size>`
+  - `SEND <target> <encrypted_filename> <size>`
+- Forwards messages/files only within the same group
+
+### Install (server machine)
+1. Install Python 3.10+.
+2. Place project files on the machine.
+3. No external package is required for `ServerCode.py`.
+
+### Run server
+```powershell
+cd D:\Project\P2PChat
+python ServerCode.py
+```
+
+Expected output:
 ```text
-~/client_received/YYYYMMDD_HHMMSS_fromUser_originalName.ext
+Server running on 0.0.0.0:12345 (No Passwords, Ephemeral)...
 ```
 
-### Security Warning
+### Server network notes
+- If clients connect from other machines, open TCP port `12345` in firewall/router.
+- Use server LAN/WAN IP in clients (not `127.0.0.1` unless local).
 
-This encryption is **NOT secure**:
+## Web Client
 
-```python
-# XOR with SHA-256-derived key + base64
-# → easily broken with known-plaintext or frequency analysis
+The web client is an additional layer for users who do not have the desktop app.
+
+### What it provides
+- Browser login to existing P2PChat server
+- Online users list
+- Encrypted text chat
+- Encrypted file transfer and browser download
+- Theme toggle (light/dark)
+- Access password gate before opening chat UI
+
+### Install (web host machine)
+1. Install Python 3.10+.
+2. Install dependencies:
+```powershell
+cd D:\Project\P2PChat
+pip install -r requirements.txt
 ```
 
-Use only for learning purposes or local trusted networks.
+### Run web client backend
+```powershell
+cd D:\Project\P2PChat
+python -m web_client.web_app
+```
 
-#### For real applications consider:
+Open in browser:
+```text
+http://127.0.0.1:8000
+```
 
-* TLS (e.g. with `ssl` module)
-* Proper key exchange (Diffie-Hellman / libsodium)
-* Authenticated encryption (ChaCha20-Poly1305, AES-GCM)
+### Web access password gate
+- Users first see `/login` page.
+- Only users with the access password can open the web app.
+- Default password is `admin1234`.
+- Change it with env var `WEB_GATE_PASSWORD`.
 
-### Known Limitations
+PowerShell example:
+```powershell
+$env:WEB_GATE_PASSWORD = "yourStrongPassword"
+python -m web_client.web_app
+```
 
-* Only simple XOR-based encryption (text & files)
-* Server stores no message/file history – pure relay
-* No offline message delivery
-* No user discovery / directory service
-* Single-threaded file receive (can block UI on huge files)
-* Basic error handling
+Bash example:
+```bash
+WEB_GATE_PASSWORD=yourStrongPassword python -m web_client.web_app
+```
 
-### Possible Improvements
+### Using web client
+1. Fill `Username`.
+2. Fill `Server IP` and `Port` (usually `12345`).
+3. Enter `Group Password`.
+4. Click `Connect`.
+5. Select target user and send message/file.
 
-* Switch text protocol to JSON or length-prefixed binary
-* Add proper message acknowledgements
-* Implement file resume / chunking
-* Add real asymmetric encryption (e.g. RSA, X25519)
-* Show online users list in GUI
-* Dark mode / better UI styling
-* Tray icon / notifications
+Requirement: web users must enter the same group password as desktop users to communicate in the same group.
+Also, they must pass the web access password gate first.
 
-### Contributing
+## Desktop App Client
 
-I’m really happy you’re interested in this little project!
-Feel free to fork, experiment, break things, fix things — everything is welcome.
+### What it provides
+- GUI login and group join
+- Encrypted one-to-one/group member messaging
+- Encrypted file sending/receiving
+- Online/left user updates
 
-Whether you want to:
+### Install (client machine)
+1. Install Python 3.10+ with Tkinter (standard Python installer on Windows includes it).
+2. Copy project files.
+3. No extra package required for `ClientCode.py`.
 
-* fix a bug you found
-* add one of the improvements listed above
-* create a completely new feature
-* modernize the UI
-* replace the toy encryption with something better
-* improve documentation
-* add tests
-* … or anything else you think would make it cooler
+### Run desktop app
+```powershell
+cd D:\Project\P2PChat
+python ClientCode.py
+```
 
-→ Pull requests are very welcome! ♥
+### Using desktop app
+1. Enter username, server IP, and port.
+2. Login.
+3. Enter group password.
+4. Chat and send files to group members.
 
-Just open an issue first if you’re planning something big, so we can discuss the direction.
+## Full Deployment Scenarios
 
-Happy coding and thank you for any contribution — even small ones make me smile 😊
+### Scenario A: Only desktop users
+1. Start `ServerCode.py` on server machine.
+2. Run `ClientCode.py` on each user machine.
+3. All users connect to same server IP/port and same group password.
+
+### Scenario B: Mixed desktop + web users
+1. Start `ServerCode.py`.
+2. Start `python -m web_client.web_app`.
+3. Desktop users run `ClientCode.py`.
+4. Browser users open `http://<web-host>:8000`.
+5. All users use same server IP/port and same group password.
+
+### Scenario C: Run server + web backend with one command
+1. Install dependencies once:
+```powershell
+cd D:\Project\P2PChat
+pip install -r requirements.txt
+```
+2. Run both services:
+```powershell
+python run_all.py --host 0.0.0.0 --web-port 8000
+```
+3. Open from other devices:
+```text
+http://<server-ip>:8000
+```
+4. In web login form use:
+- `Server IP`: `127.0.0.1` (when both services run on same machine)
+- `Port`: `12345`
+
+## Troubleshooting
+
+### `No module named 'web_client'`
+Cause: command executed from wrong directory.
+Fix:
+```powershell
+cd D:\Project\P2PChat
+python -m web_client.web_app
+```
+
+### WebSocket warnings: `No supported WebSocket library detected`
+Fix:
+```powershell
+pip install websockets wsproto
+```
+
+### Browser cannot connect to server
+- Confirm `ServerCode.py` is running.
+- Check IP/port entered in web/desktop client.
+- Check firewall for TCP `12345`.
+
+### Cannot open web app page directly
+This is expected now. `/` redirects to `/login`.
+Enter the correct web access password first.
+
+## Security Notice
+
+Current encryption method is XOR with SHA-256-derived key and is not secure for production use.
+Use this project for learning/prototyping in trusted environments.
 
 ## License
 
-MIT License (add a LICENSE file if you want to publish)
-
-Feel free to fork, improve, and PR!
-
-Happy coding!
+MIT (see `LICENSE`).

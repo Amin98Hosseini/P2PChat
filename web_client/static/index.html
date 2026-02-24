@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>P2PChat Web</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="page">
+    <header>
+      <div class="header-row">
+        <div>
+          <h1>P2PChat Web Client</h1>
+          <p>Desktop users and web users can chat in the same group.</p>
+        </div>
+        <button id="theme-btn" class="theme-btn" type="button">Dark Theme</button>
+      </div>
+    </header>
+
+    <section class="card" id="connect-card">
+      <div class="row">
+        <label>Username</label>
+        <input id="username" placeholder="your name" />
+      </div>
+      <div class="row two-col">
+        <div>
+          <label>Server IP</label>
+          <input id="server_ip" value="127.0.0.1" />
+        </div>
+        <div>
+          <label>Port</label>
+          <input id="server_port" type="number" value="12345" />
+        </div>
+      </div>
+      <div class="row">
+        <label>Group Password</label>
+        <input id="group_password" type="password" placeholder="same password as desktop users" />
+      </div>
+      <div class="actions">
+        <button id="connect-btn">Connect</button>
+        <button id="disconnect-btn" disabled>Disconnect</button>
+        <button id="refresh-btn" disabled>Refresh Online</button>
+      </div>
+      <div id="status" class="status">Disconnected</div>
+    </section>
+
+    <main class="grid">
+      <section class="card panel">
+        <h2>Online Users</h2>
+        <ul id="online-list"></ul>
+      </section>
+
+      <section class="card panel">
+        <h2>Chat</h2>
+        <div id="chat-log" class="chat-log"></div>
+        <div class="row two-col">
+          <div>
+            <label>Send To</label>
+            <select id="message-target"></select>
+          </div>
+          <div>
+            <label>File To</label>
+            <select id="file-target"></select>
+          </div>
+        </div>
+
+        <div class="row">
+          <label>Message</label>
+          <div class="send-row">
+            <input id="message-input" placeholder="Type a message" />
+            <button id="send-message-btn" disabled>Send</button>
+          </div>
+        </div>
+
+        <div class="row">
+          <label>Send File</label>
+          <div class="send-row">
+            <input id="file-input" type="file" />
+            <button id="send-file-btn" disabled>Send File</button>
+          </div>
+        </div>
+
+        <h3>Received Files</h3>
+        <ul id="files-list"></ul>
+      </section>
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
